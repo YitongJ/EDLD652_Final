@@ -1,0 +1,715 @@
+---
+title: "Women Educational Attainment and Childbearing"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(rio)
+library(ggplot2)
+library(tidyverse)
+library(here)
+library(gtsummary)
+library(kableExtra)
+library(plotly)
+library(gapminder)
+library(ggtext)
+library(gganimate)
+library(magick)
+library(dplyr)
+library(tidyr)
+library(viridis)
+```
+
+```{r ,include=FALSE}
+woman <- import(here("data", "BL_v3_F2564.csv"))%>%
+  as.tibble()
+
+child <- import(here("data", "childbearing.csv"))%>%
+  as.tibble()
+
+child$country <- child$`Region, subregion, country or area *`
+child$year <- child$Year
+
+### combine dataset
+
+d <- left_join(woman, child, join_by(country, year))
+
+d <- d[, -c(21, 22)]
+
+d$childbearing <- as.numeric(d$`Mean Age Childbearing (years)`)
+
+d<- d %>%
+  group_by(country) %>%
+  mutate(Mean.year.of.childbearing = mean(childbearing))
+
+head(d)
+
+### rename variables
+
+d <- d %>%
+   rename("No_formal" = "lu", 
+          "Primary" = "lp",
+          "Primary_complete" = "lpc",
+          "Secondary" = "ls",
+          "Secondary_complete" = "lsc",
+          "Tertiary" = "lh",
+          "Tertiary_complete" = "lhc",
+          "Schooling.year" = "yr_sch",
+          "Average.tertiary.schooling" = "yr_sch_ter",
+          "Region" = "region_code",
+          "Population" = "pop"
+          )
+
+head(d)
+sapply(d, function(x) sum(is.na(x))) 
+dclean <- d %>%
+  drop_na()
+
+```
+
+# About this project
+
+## Column {data-width="400"}
+
+### Background
+
+Exploring the patterns of women's educational attainment and childbearing and their relationship is crucial for understanding broader societal dynamics and promoting gender equality. Education empowers women with knowledge, skills, and the confidence to make informed decisions about their lives, including family planning and career choices. Higher levels of education often correlate with later ages of marriage and childbearing, smaller family sizes, and improved maternal and child health outcomes. This, in turn, contributes to better economic prospects for women and their families, reduces poverty, and promotes sustainable development. Moreover, understanding these patterns helps policymakers and stakeholders design more effective educational and health programs that address the unique needs of women across different cultures and societies. By investing in women's education, societies can break cycles of poverty, improve quality of life, and foster environments where gender equality can thrive.
+
+**Description of Data and Source**
+
+The data I plan to use for the final project come from two datasets. The first one is the Barro-Lee dataset reported in Barro and Lee (2013), including 2,044 observations on 20 variables. The data reflect Barro-Lee estimates of educational attainment for the female population aged 25-64 from 1950 to 2015. This dataset is publicly available from the website: <http://www.barrolee.com/>. More information related to the detailed data sources and missing observations estimation were described in the original paper. Another one is the UN, World Population Prospects (2022) dataset available from <https://population.un.org/wpp/Download/> , which has 20,596 observations on 65 variables including the one of interest Mean Age Childbearing (years) from 1950 to 2100.In order to answer the research questions of this project, I extracted data of Mean Age Childbearing (years) in 1950-2015 and joined it to the Barro-Lee dataset.
+
+**Research Questions**
+
+This project focuses on three questions:
+
+1.  What is the relationship between the mean age of first childbearing and the average total years of schooling among the female population across different countries between 1950 and 2015?
+
+2.  How has the relationship between the female population and the average years of tertiary education for women in South Asian countries changed from 1950 to 2015?
+
+3.  What is the trend in the total years of schooling for women in South Asian countries from 1950 to 2015?
+
+4.  How has the total years of schooling at different educational levels for women in the US evolved from 1950 to 2015?
+
+## Column {data-width="400"}
+
+### Descriptive Table
+
+```{r}
+d1 <- dclean[, -2]
+
+table <- d1 %>% 
+  select(6:16, 19, 22) %>%
+  tbl_summary(
+  statistic = list(
+    all_continuous() ~ "{mean}({sd})",
+    all_categorical() ~ "{p}%"
+    ), 
+    label = list(
+    No_formal ~ "No formal education",
+    Primary ~ "Primary as highest level",
+    Primary_complete ~ "Primary completed",
+    Secondary ~ "Secondary as highest level",
+    Secondary_complete ~ "Secondary completed",
+    Tertiary ~ "Tertiary as highest level",
+    Tertiary_complete ~ "Tertiary completed",
+    Schooling.year ~ "Average years of total schooling",
+    yr_sch_pri ~ "Average years of primary schooling",
+    yr_sch_sec ~ "Average years of secondary schooling",
+   Average.tertiary.schooling= "Average years of tertiary schooling",
+    Mean.year.of.childbearing ~ "Mean age of first childbearing",
+    Population ~ "female population (in 1000s)"
+   )
+) %>% 
+  modify_caption("**Table 1. Descriptive Statistics**")
+
+table
+
+```
+
+In this combined dataset, there are 1,862 observations for 23 variables. Based on the information from Table 1, the average global female population in 1950-2015 was 6.775million. Between the age of 28-29 years (Mean = 28.72, SD = 1.15), the female would have their first child. As for educational attainment, 38% of the global female population didn’t receive formal education in 1950-2015. Meanwhile, across all countries within the sample, 31% of the female population had primary school as their highest level of schooling, while 16% had it completed. Twenty four percent of the sample had secondary school as their highest level, while 14% completed it. Only 7% entered tertiary level of schooling, and only 4.6% had it finished. The average years of total schooling of female population were 5.1 years (SD = 3.7) across the world in 1950-2015, while the average years of primary level were 3.3 years (SD = 2.16), along with 1.61 years (SD = 1.64) for the secondary level and 0.24 years (SD = 0.34) for the tertiary level. Besides, in this sample, 17% of countries belong to the group of Advanced Economies, 12% as East Asia and the Pacific, 14% as Europe and Central Asia, 17% as Latin America and the Caribbean, 13% as Middle East and North Africa, 5.3% as South Asia, and 23% as Sub-Saharan Africa.
+
+# Vis 1
+
+## Inputs {.sidebar}
+
+The variables in visualization 1 include the average years of total schooling, the mean age of childbearing, country names, region codes, population, and year. Specifically, ‘the average years of total schooling’ refers to the mean duration of education in primary, secondary, or tertiary institutions. ‘The mean age of childbearing’ refers to the average age at which women give birth to their first child. ‘Population’ is limited to the female population of each country. I aim to use this plot to show the relationship between educational attainment (i.e., the average years of total schooling) and the mean age of childbearing among the female population in countries around the world from 1950 to 2015.
+
+In the second version, I added a linear model fit line to the plot showing the relationship between educational attainment and average childbearing age. To avoid covering the data, I didn't include confidence interval.
+
+Incorporating the feedback, I have adjusted the y-axis of the final version of plot to start from 24, to show a clearer pattern in the data. Additionally, I added a linear regression fit line to illustrate the correlation between women's educational attainment and the mean age of childbearing from 1950 to 2015.
+
+## Row {data-width="260"}
+
+### Final version
+
+```{r, fig.width = 8, fig.height = 5 }
+
+model1 <- lm(Schooling.year ~ Mean.year.of.childbearing, data = dclean)
+intercept1 <- coef(model1)[1]
+slope1 <- coef(model1)[2]
+equation1 <- paste("y = ", round(slope1, 2), "x", " + ", round(intercept1, 2))
+
+
+p1 <- dclean %>%
+  ggplot(aes(x=Schooling.year, y=Mean.year.of.childbearing, label = country)) + 
+ geom_point(aes(color = Region, frame = year, size = Population)) +
+  scale_color_viridis(discrete = TRUE)+
+    annotate("text", x = 12, y = 24.5, label = equation1, hjust = 0, vjust = 0, color = "black") +
+  geom_smooth(method = lm, se = FALSE) + 
+  scale_x_continuous("Average years of total schooling", 
+                     breaks = seq(0, 14,2),
+                            limits = c(0,14)) +
+  scale_y_continuous("Mean age of first childbearing",
+                    breaks = seq(24, 32,4),
+                         limits = c(24,32)) +
+   theme_minimal(base_size = 10) +
+  labs(
+    title = "A negative relationship was found between educational attainment and \n the mean age of childbearing for women worldwide (1950-2015)",
+    x = "Total years of schooling",
+    y = "Mean age of childbearing",
+    color = "Region",
+    size = "",
+    caption = "Note: The sizes of the data points represent population sizes. \n Source: Barro and Lee (2013), http://www.barrolee.com/ \n UN, World Population Prospects, https://population.un.org/wpp/Download/"
+  ) +
+theme(
+  plot.title = element_text(size = 10),
+  legend.position = "right",
+  legend.direction = "vertical", 
+  legend.title = element_text(size = 8), 
+  legend.text = element_text(size = 6), 
+  axis.ticks.x = element_line(color = "black"),
+  axis.text.x = element_text(vjust = 5),
+  axis.ticks.length = unit(-0.5, "cm"),
+  axis.line = element_line(color = "black"),
+  panel.grid.major = element_blank()
+ 
+)
+
+
+ggplotly(p1) 
+
+```
+
+## Column {.tabset data-width="220,"}
+
+### Original version
+
+```{r, fig.width = 4, fig.height = 6}
+
+p1 <- dclean %>%
+  filter(year == 2015) %>%
+  ggplot(aes(x=Schooling.year, y=Mean.year.of.childbearing, color = Region)) + 
+ geom_point(aes(size = Population)) +
+  scale_x_continuous("Average years of total schooling", 
+                     breaks = seq(0, 14,2),
+                            limits = c(0,14)) +
+  scale_y_continuous("Mean age of first childbearing",
+                    breaks = seq(0, 34,4),
+                         limits = c(0,34)) +
+   theme_minimal(base_size = 10) +
+  labs(
+    title = "Relation between the educational attainment and mean age of <br> childbearing for female population worldwide in 2015",
+    x = "Total years of schooling",
+    y = "Mean age of childbearing",
+    color = "Region",
+    size = "Population shown in point size",
+    caption = "Source: Barro and Lee (2013), http://www.barrolee.com/ \n UN, World Population Prospects, https://population.un.org/wpp/Download/"
+  ) +
+theme(
+  plot.title = element_markdown(margin = margin(b = 5), size  = 12),
+  legend.position = "right",
+  legend.direction = "vertical", 
+  legend.title = element_text(size = 8), 
+  legend.text = element_text(size = 6), 
+  axis.line.x = element_line(color = "black"), 
+  axis.line.y = element_line(color = "black"),
+  panel.grid.major.y = element_blank(),
+  panel.grid.major.x = element_blank(),
+  plot.caption       = element_text(hjust = 1, 
+                                              size  = 6,
+                                              margin=margin(t=5))
+)
+
+ggplotly(p1)
+
+```
+
+### Second version
+
+```{r, fig.width = 10, fig.height = 6 }
+
+d2 <- dclean %>%
+  filter(year == 2015) 
+
+model <- lm(Schooling.year ~ Mean.year.of.childbearing, data = d2)
+
+intercept <- coef(model)[1]
+slope <- coef(model)[2]
+
+equation <- paste("y = ", round(slope, 2), "x", " + ", round(intercept, 2))
+
+
+d2 %>%
+  ggplot(aes(x=Schooling.year, y=Mean.year.of.childbearing, label = country)) + 
+ geom_point(aes(size = Population, frame = year, color = Region)) +
+  geom_smooth(method = lm, se = FALSE) + 
+   annotate("text", x = 0, y = 32, label = equation, hjust = 0, vjust = 0, color = "red") +
+  scale_x_continuous("Average years of total schooling", 
+                     breaks=seq(0, 14, by = 2),
+                     limits = c(0, 14)) +
+  scale_y_continuous("Mean age of first childbearing",
+                     breaks = seq(0, 34, by = 4),
+                     limits = c(0, 34)) +
+   theme_minimal(base_size = 10) +
+  labs(
+    title = "Relation between the educational attainment and mean age of \n childbearing  for female population worldwide in 2015",
+    x = "Total years of schooling",
+    y = "Mean age of childbearing",
+    color = "Region",
+    size = "Population shown in point size",
+    caption = "Source: Barro and Lee (2013), http://www.barrolee.com/ \n UN, World Population Prospects, https://population.un.org/wpp/Download/"
+  ) +
+theme(
+  plot.title = element_markdown(size  = 10),
+  legend.position = "right",
+  legend.direction = "vertical", 
+  legend.title = element_text(size = 8), 
+  legend.text = element_text(size = 6), 
+  axis.line.x = element_line(color = "black"), 
+  axis.line.y = element_line(color = "black"),
+  panel.grid.major.y = element_blank(),
+  panel.grid.major.x = element_blank()
+)+
+  scale_y_continuous(breaks = seq(0, 34,4),
+                         limits = c(0,34))+
+  scale_x_continuous(breaks = seq(0, 14,2),
+                            limits = c(0,14))
+
+```
+
+# Vis 2
+
+## Inputs {.sidebar}
+
+The aim of this visualization is to show the relationship between the female population and the average years of tertiary schooling for countries in South Asia from 1950 to 2015. Therefore, the variables include population, average years of tertiary schooling, country names, percentage of the population with tertiary education as the highest educational level, and year. Similar to visualization 1, I colored data points by country and distinguished point sizes based on the percentage of the female population with tertiary education as their highest educational level.
+
+In the final version, I made the plot interactive, displaying data from 1950 to 2015 and featuring pop-up windows when viewers hover over data points. Given that the population growth rate can be exponential, I also added a panel that transforms the x-axis into logarithmic scale.
+
+## Column {data-width="280"}
+
+### Final version
+
+```{r, fig.width = 10, fig.height = 6 }
+
+d3 <- dclean %>%
+  filter(Region == "South Asia" )
+
+plot2 <-  d3 %>%
+  ggplot(aes(x=Population, y = Average.tertiary.schooling, color = country)) + 
+  geom_point(aes(size = Tertiary, frame = year)) +
+    scale_color_viridis(discrete = TRUE)+
+   theme_minimal(base_size = 10) +
+  labs(
+    title = "The population of women and the average years of tertiary schooling \n both increased significantly in South Asian countries (1950-2015)",
+    x = "Population (in 1000s)",
+    y = "Average years of tertiary schooling",
+    color = "Country Name",
+    size = "",
+    caption = "Note: The sizes of the data points represent population sizes. \n Source: Barro and Lee (2013), http://www.barrolee.com/ \n UN, World Population Prospects, https://population.un.org/wpp/Download/"
+  ) +
+theme( plot.title = element_text(size = 10),
+legend.position = "right", 
+legend.direction = "vertical", 
+legend.title = element_text(size = 8),
+legend.text = element_text(size = 8), 
+panel.grid.major.y = element_blank(),
+  panel.grid.major.x = element_blank(),
+axis.line.x = element_line(color = "black"), 
+  axis.line.y = element_line(color = "black"),
+) +
+  scale_x_continuous(breaks = seq(0, 400000,50000),
+                         limits = c(0,400000),
+                     labels = scales::comma)+
+  scale_y_continuous(breaks = seq(0, 0.7,0.1),
+                            limits = c(0,0.7))
+
+p2 <- ggplotly(plot2) 
+
+# Define button for switching to logarithmic scale
+to_log_button <- list(
+  method = "relayout",
+  args = list(list(
+    xaxis = list(
+      type = "log", 
+      range = list(log10(10), log10(400000)),
+      title = "Log of population",
+      titlefont = list(size = 10), 
+      tickfont = list(size = 10)
+    ), 
+    yaxis = list(
+      type = "linear", 
+      range = c(0,0.7),
+      titlefont = list(size = 10), 
+      tickfont = list(size = 10),
+      title = "Average years of tertiary schooling",
+      showline = TRUE,  
+      linecolor = "black", 
+      linewidth = 0.5,  
+      dtick = 0.1
+    )
+  )),
+  label = "Log"
+)
+
+# Button to reset to the original plot (linear scale in this case)
+reset_to_original <- list(
+  method = "relayout",
+  args = list(list(
+    xaxis = list(
+      type = "linear",
+      range = c(0, 400000),
+      autorange = FALSE,
+      title = "Population (in 1000s)",
+      titlefont = list(size = 10),
+      tickfont = list(size = 10), 
+      tickformat = ",", 
+      tickmode = "auto",
+      nticks = 20
+    ),
+    yaxis = list(
+      type = "linear",
+      range = c(0, 0.7),
+      autorange = FALSE,
+      title = "Average years of tertiary schooling",
+      titlefont = list(size = 10), 
+      tickfont = list(size = 10), 
+      dtick = 0.1 
+    )
+  )),
+  label = "Reset"
+)
+
+p2 <- layout(p2, updatemenus = list(
+  list(
+    type = "buttons",
+    direction = "vertical",
+    xanchor = 'right',
+    yanchor = "top",
+    pad = list(r= 0, t= 5, b = 5),
+    x = 1,
+    y = 1,
+    buttons = list(reset_to_original, to_log_button) # Order can be adjusted
+  )
+))
+
+p2.1 <- layout(p2, 
+             annotations = list(
+               list(
+                 text = "Note: The sizes of the data points represent population sizes. <br>Source: Barro and Lee (2013), http://www.barrolee.com/ <br>UN, World Population Prospects, https://population.un.org/wpp/Download/",
+                 x = 1.03,
+                 y = -0.085, # You might need to adjust this value based on your plot's layout
+                 showarrow = FALSE,
+                 xref = 'paper',
+                 yref = 'paper',
+                 xanchor = 'right',
+                 yanchor = 'bottom',
+                 font = list(
+                   size = 6
+                 )
+               )
+             ),
+             margin = list(b = 100) # Adjust bottom margin to ensure caption is visible
+            )
+
+p2.1
+
+```
+
+## Column {.tabset data-width="220,"}
+
+### Original version
+
+```{r, fig.width = 10, fig.height = 6 }
+
+d3.1 <- dclean %>%
+  filter(year ==2015) %>%
+  filter(Region == "South Asia" )
+
+plot2 <-  d3.1 %>%
+  ggplot(aes(x=Population, y = Average.tertiary.schooling, color = country)) + 
+  geom_point(aes(size = Tertiary)) +
+   theme_minimal(base_size = 10) +
+  labs(
+    title = "Relation between the female population and the average years of \n tertiary schooling for countries in South Asia in 2015",
+    x = "Population (in 1000s)",
+    y = "Average years of tertiary schooling",
+    color = "Country Name",
+    size = "% of tertiary shown in point size",
+    caption = "Source: Barro and Lee (2013), http://www.barrolee.com/ \n UN, World Population Prospects, https://population.un.org/wpp/Download/"
+  ) +
+theme(plot.title = element_markdown(size  = 10),
+legend.position = "right", # Position legend at the bottom
+legend.direction = "vertical", # Orient legend horizontally
+legend.title = element_text(size = 8), # Set legend title size
+legend.text = element_text(size = 8), # Set legend text size
+axis.line.x = element_line(color = "black"), 
+  axis.line.y = element_line(color = "black"),
+) +
+  scale_x_continuous(breaks = seq(0, 400000,50000),
+                         limits = c(0,400000),
+                     labels = scales::comma)+
+  scale_y_continuous(breaks = seq(0, 0.35,0.05),
+                            limits = c(0,0.35))
+
+plot2
+
+```
+
+# Vis 3
+
+## Inputs {.sidebar}
+
+The variables in visualization 3 include population, average years of total schooling, country names, and year, because I would like to use this plot to show the changing trends in educational attainment among women from countries in South Asia from 1950 to 2015. I colored the data lines by country.
+
+In the second version, I changed the plot to be dynamic. However, I noticed that the change patterns of Maldives and Sri Lanka are different from those of other countries, to emphasize this, I developed the final version. Incorporating the feedback to this visualization, I removed the x and y axes lines, made sure there was space between the x-axis line and the x-axis labels, and added the country names as annotation at the end of each line and remove the legend. I also corrected the mistake of y axis title to 'average years of total schooling'.
+
+
+## Column {data-width="400"}
+
+### Final version
+
+```{r, fig.width = 8, fig.height = 6 }
+
+d4 <- dclean %>%
+  filter(Region == "South Asia") %>%
+  select(country, year, Schooling.year, yr_sch_sec)
+
+p3 <- ggplot(d4, aes(x = year, y = Schooling.year, group = country, color = country)) +
+    geom_point(data=d4,aes(x=year,y=Schooling.year), shape =21, color = "black", fill = "white", size=3) +
+  geom_path()+
+  theme_minimal() +
+  labs(
+       x = "Year",
+       y = "Average years of total schooling",
+       color = "Country",
+       caption = "Source: Barro and Lee (2013), http://www.barrolee.com/ \n UN, World Population Prospects, https://population.un.org/wpp/Download/") +
+  theme(
+legend.position = "right", 
+legend.direction = "vertical", 
+legend.title = element_text(size = 10), 
+legend.text = element_text(size = 6), 
+  axis.line = element_blank(),
+panel.grid.major.y = element_blank(),
+  panel.grid.major.x = element_blank(),
+  axis.ticks.x = element_blank(),
+  axis.text.x = element_text()
+) +
+  scale_x_continuous(breaks = seq(1950, 2015,5),
+                         limits = c(1950,2015))+
+  scale_y_continuous(breaks = seq(0, 12,2),
+                            limits = c(0,12))+
+  transition_reveal(year) 
+
+my_color          <- rep('gray',length(unique(d4$country)))
+  names(my_color)   <- unique(d4$country)
+  my_color['Maldives'] <- 'blue'
+ my_color['Sri Lanka'] <- 'orange'
+
+
+labels <- subset(d4,country = c('India', 'Maldives'))
+ 
+p4<-  p3 +
+  labs(title = "Significant Increase in Average Years of Total Schooling for Women in <span style='color:orange'>Sri Lanka </span> Versus Temporary Decrease in <span style='color:blue'>Maldives </span> (1950-2015)") +
+  theme(plot.title = element_markdown(size  = 10))+
+   scale_color_manual(values = my_color)+
+    geom_text(data=labels,aes(x=year,y=Schooling.year,label=country),
+              size = 4,hjust=-0.2,vjust=1)+
+    guides(size=FALSE,color=FALSE)
+
+animate(p4, 
+          duration = 23, 
+          fps = 20, 
+          width = 800, 
+          height = 600, 
+          renderer = gifski_renderer(),
+         end_pause = 10)
+
+
+
+```
+
+## Column {.tabset data-width="225,"}
+
+### Original version
+
+```{r}
+
+
+
+d4.1 <- dclean %>%
+  filter(Region == "South Asia") %>%
+  select(country, year, Schooling.year, yr_sch_sec)
+
+p3 <- ggplot(d4.1, aes(x = year, y = Schooling.year, group = country, color = country)) +
+    geom_point(data=d4.1,aes(x=year,y=Schooling.year), shape =21, color = "black", fill = "white", size=3) +
+  geom_path(aes(group = country, frame = year)) +
+  theme_minimal() +
+  labs(title = "Changes in total schooling by country in South Asia (1950-2015)",
+       x = "Year",
+       y = "Total years of schooling",
+       color = "Country",
+       caption = "Source: Barro and Lee (2013), http://www.barrolee.com/ \n UN, World Population Prospects, https://population.un.org/wpp/Download/"
+       ) +
+  theme(
+legend.position = "right", # Position legend at the bottom
+legend.direction = "vertical", # Orient legend horizontally
+legend.title = element_text(size = 10), # Set legend title size
+legend.text = element_text(size = 6), # Set legend text size
+axis.line.y = element_line(color = "black"), 
+  axis.line.x = element_blank(),
+panel.grid.major.y = element_blank(),
+  panel.grid.major.x = element_blank(),
+  axis.ticks.x = element_blank(),
+  axis.text.x = element_text(vjust = 10)
+) +
+  scale_x_continuous(breaks = seq(1950, 2015,5),
+                         limits = c(1950,2015))+
+  scale_y_continuous(breaks = seq(0, 12,2),
+                            limits = c(0,12))+
+     geom_hline(yintercept = 0, color = "black", size = 0.2)
+
+p3
+
+```
+
+### Second version
+
+```{r}
+
+
+p3 <- ggplot(d4.1, aes(x = year, y = Schooling.year, group = country, color = country)) +
+    geom_point(data=d4.1,aes(x=year,y=Schooling.year), shape =21, color = "black", fill = "white", size=3) +
+  geom_path()+
+  theme_minimal() +
+  labs(title = "Changes in total schooling by country in South Asia (1950-2015)",
+       x = "Year",
+       y = "Total years of schooling",
+       color = "Country",
+       caption = "Source: Barro and Lee (2013), http://www.barrolee.com/ \n UN, World Population Prospects, https://population.un.org/wpp/Download/") +
+  theme(
+legend.position = "right", # Position legend at the bottom
+legend.direction = "vertical", # Orient legend horizontally
+legend.title = element_text(size = 10), # Set legend title size
+legend.text = element_text(size = 6), # Set legend text size
+axis.line.y = element_line(color = "black"), 
+  axis.line.x = element_blank(),
+panel.grid.major.y = element_blank(),
+  panel.grid.major.x = element_blank(),
+  axis.ticks.x = element_blank(),
+  axis.text.x = element_text(vjust = 10)
+) +
+  scale_x_continuous(breaks = seq(1950, 2015,5),
+                         limits = c(1950,2015))+
+  scale_y_continuous(breaks = seq(0, 12,2),
+                            limits = c(0,12))+
+     geom_hline(yintercept = 0, color = "black", size = 0.2) +
+  transition_reveal(year) 
+
+ animate(p3, 
+          duration = 20, 
+          fps = 20, 
+          width = 800, 
+          height = 600, 
+          renderer = gifski_renderer())
+
+
+```
+
+# Vis 4
+
+## Column {data-width="400"}
+
+### Final version
+
+```{r}
+
+dir_out <- file.path(tempdir(), "US")
+dir.create(dir_out, recursive = TRUE)
+
+US<- d %>%
+  filter(country == "USA") %>%
+  select(year, Schooling.year, yr_sch_pri, yr_sch_sec, Average.tertiary.schooling)
+
+US <- US %>%
+  rename("Total years of schooling" = "Schooling.year",
+         "Years of primary schooling" = "yr_sch_pri",
+         "Years of secondary schooling" = "yr_sch_sec",
+         "Years of tertiary schooling" = "Average.tertiary.schooling")
+
+US <- US %>%
+  pivot_longer(cols = c(3:6),
+    names_to = "School_level",
+    values_to = "Years_of_schooling")
+
+level <-
+  US %>%
+  pull("School_level") %>%
+  unique(.) %>%
+  sort(.)
+
+for (n in level) {
+plot4 <-
+    US %>%
+  filter(School_level == n) %>%
+    ggplot(aes(year,Years_of_schooling)) +
+    geom_col()+
+    theme_minimal()+
+  labs(caption = "Note: Changes in Educational Attainment at Different Levels for Women in the US (1950-2015)")+
+  theme(panel.grid.major.y = element_blank(),
+  panel.grid.major.x = element_blank(),
+  panel.grid.minor.y = element_blank(),
+  panel.grid.minor.x = element_blank(),
+  axis.line.y = element_line(color = "black"),
+  axis.ticks.y = element_line(color = "black"),
+  axis.text.x = element_text(vjust = 8))+
+  scale_x_continuous(breaks = seq(min(US$year), max(US$year), by = 5))+
+   scale_y_continuous(breaks = seq(0, max(US$Years_of_schooling), by = 2))+
+   geom_hline(yintercept = 0, color = "black", size = 0.5)+
+  labs(x = "Year", y = "Average years of schooling", title = n)
+
+fp <- file.path(dir_out, paste0(n, ".png"))
+  
+  ggsave(plot = plot4, 
+         filename = fp, 
+         device = "png")
+
+}
+
+
+## list file names and read in
+imgs <- list.files(dir_out, full.names = TRUE)
+img_list <- lapply(imgs, image_read)
+
+## join the images together
+img_joined <- image_join(img_list)
+
+## animate at 2 frames per second
+img_animated <- image_animate(img_joined, fps = 0.5)
+
+## view animated image
+img_animated
+
+## save to disk
+image_write(image = img_animated,
+            path = "school.gif")
+
+
+
+  
+```
