@@ -3,8 +3,8 @@ title: "Women Educational Attainment and Childbearing"
 output: 
   flexdashboard::flex_dashboard:
     orientation: columns
+    vertical_layout: fill
     theme: flatly
-runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
